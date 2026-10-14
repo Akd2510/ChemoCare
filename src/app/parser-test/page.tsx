@@ -1,14 +1,8 @@
-
 "use client";
 
 import { useState } from "react";
 import { parseBloodReportText } from "@/lib/blood-report-parser";
-
-type TextItem = {
-  str?: string;
-  transform?: number[];
-  width?: number;
-};
+import type { TextItem as PdfTextItem } from "pdfjs-dist/types/src/display/api";
 
 type PageDiagnostic = {
   page: number;
@@ -75,17 +69,23 @@ export default function ParserTestPage() {
         const page = await pdf.getPage(pageNumber);
         const content = await page.getTextContent();
 
+        // Exclude TextMarkedContent, which does not have the same
+        // properties as a regular PDF.js text item.
         const items = content.items.filter(
-          (item): item is TextItem =>
-            "str" in item && typeof item.str === "string"
+          (item): item is PdfTextItem =>
+            "str" in item &&
+            typeof item.str === "string" &&
+            "transform" in item &&
+            Array.isArray(item.transform) &&
+            item.transform.length >= 6
         );
 
         const positioned = items
-          .filter((item) => item.str?.trim() && item.transform)
+          .filter((item) => item.str.trim().length > 0)
           .map((item) => ({
-            text: item.str!.trim(),
-            x: item.transform![4],
-            y: item.transform![5],
+            text: item.str.trim(),
+            x: item.transform[4],
+            y: item.transform[5],
           }))
           .sort((a, b) => {
             if (Math.abs(a.y - b.y) > 3) return b.y - a.y;
@@ -203,10 +203,7 @@ export default function ParserTestPage() {
       return result.referenceText;
     }
 
-    if (
-      result.referenceLow !== null &&
-      result.referenceHigh !== null
-    ) {
+    if (result.referenceLow !== null && result.referenceHigh !== null) {
       return result.referenceLow + " to " + result.referenceHigh;
     }
 
@@ -255,8 +252,7 @@ export default function ParserTestPage() {
           </label>
 
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            PDF only, maximum 15 MB and 8 pages. This test page does not
-            run OCR.
+            PDF only, maximum 15 MB and 8 pages. This test page does not run OCR.
           </p>
 
           <input
@@ -320,9 +316,7 @@ export default function ParserTestPage() {
                       key={page.page}
                       className="border-b border-slate-100 last:border-0"
                     >
-                      <td className="px-3 py-3 font-medium">
-                        {page.page}
-                      </td>
+                      <td className="px-3 py-3 font-medium">{page.page}</td>
                       <td className="px-3 py-3">{page.characters}</td>
                       <td className="px-3 py-3">{page.textItems}</td>
                       <td className="px-3 py-3">
@@ -351,8 +345,8 @@ export default function ParserTestPage() {
 
           {parsedResults.length === 0 ? (
             <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-              No rows met the parser requirements. Inspect the extracted
-              text below.
+              No rows met the parser requirements. Inspect the extracted text
+              below.
             </p>
           ) : (
             <div className="mt-4 overflow-x-auto">
@@ -370,8 +364,7 @@ export default function ParserTestPage() {
 
                 <tbody>
                   {parsedResults.map((result, index) => {
-                    const flagged =
-                      result.needsReview || result.duplicate;
+                    const flagged = result.needsReview || result.duplicate;
 
                     return (
                       <tr
@@ -379,9 +372,7 @@ export default function ParserTestPage() {
                         className="border-b border-slate-100 align-top last:border-0"
                       >
                         <td className="px-3 py-3">
-                          <div className="font-semibold">
-                            {result.testName}
-                          </div>
+                          <div className="font-semibold">{result.testName}</div>
                           <div className="mt-1 text-xs text-slate-500">
                             {result.testCode}
                           </div>
@@ -391,9 +382,7 @@ export default function ParserTestPage() {
                           {result.result}
                         </td>
 
-                        <td className="px-3 py-3">
-                          {result.unit || "—"}
-                        </td>
+                        <td className="px-3 py-3">{result.unit || "—"}</td>
 
                         <td className="px-3 py-3">
                           {formatReference(result)}
