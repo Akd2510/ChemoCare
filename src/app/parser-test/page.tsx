@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { parseBloodReportText } from "@/lib/blood-report-parser";
-import type { TextItem as PdfTextItem } from "pdfjs-dist/types/src/display/api";
 
 type PageDiagnostic = {
   page: number;
@@ -69,24 +68,30 @@ export default function ParserTestPage() {
         const page = await pdf.getPage(pageNumber);
         const content = await page.getTextContent();
 
-        // Exclude TextMarkedContent, which does not have the same
-        // properties as a regular PDF.js text item.
-        const items = content.items.filter(
-          (item): item is PdfTextItem =>
-            "str" in item &&
-            typeof item.str === "string" &&
-            "transform" in item &&
-            Array.isArray(item.transform) &&
-            item.transform.length >= 6
-        );
+        // Narrow PDF.js union types without a custom type predicate.
+        // TextMarkedContent items do not contain regular text coordinates.
+        const positioned = content.items
+          .flatMap((item) => {
+            if (!("str" in item) || typeof item.str !== "string") {
+              return [];
+            }
 
-        const positioned = items
-          .filter((item) => item.str.trim().length > 0)
-          .map((item) => ({
-            text: item.str.trim(),
-            x: item.transform[4],
-            y: item.transform[5],
-          }))
+            if (!("transform" in item) || !Array.isArray(item.transform)) {
+              return [];
+            }
+
+            if (item.transform.length < 6 || !item.str.trim()) {
+              return [];
+            }
+
+            return [
+              {
+                text: item.str.trim(),
+                x: item.transform[4],
+                y: item.transform[5],
+              },
+            ];
+          })
           .sort((a, b) => {
             if (Math.abs(a.y - b.y) > 3) return b.y - a.y;
             return a.x - b.x;
@@ -123,7 +128,9 @@ export default function ParserTestPage() {
             .replace(/\s+/g, " ")
             .trim();
 
-          if (line) pageLines.push(line);
+          if (line) {
+            pageLines.push(line);
+          }
         }
 
         const characters = pageLines.join("\n").replace(/\s/g, "").length;
